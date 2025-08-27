@@ -1,6 +1,13 @@
 export default async function handler(req, res) {
   try {
-    // 1) Read raw body (Twilio posts x-www-form-urlencoded)
+    // Health check in browser
+    if (req.method === "GET") {
+      return res.status(200).send("ok");
+    }
+
+    const started = Date.now();
+
+    // Read raw body (Twilio posts x-www-form-urlencoded)
     const rawBody = await new Promise((resolve, reject) => {
       let data = "";
       req.on("data", (chunk) => (data += chunk));
@@ -8,15 +15,16 @@ export default async function handler(req, res) {
       req.on("error", reject);
     });
 
-    const contentType =
-      req.headers["content-type"] || "application/x-www-form-urlencoded";
+    const contentType = req.headers["content-type"] || "application/x-www-form-urlencoded";
+    const targetUrl = process.env.TARGET_URL || "https://onyx-bot.biocoded.com/bot/button/trigger";
+    const authToken = process.env.BOT_AUTH_TOKEN;
 
-    // 2) Forward to your real webhook
-    const targetUrl =
-      process.env.TARGET_URL ||
-      "https://onyx-bot.biocoded.com/bot/button/trigger";
-
-    const authToken = process.env.BOT_AUTH_TOKEN; // set this in Vercel env
+    console.log("Incoming webhook", {
+      method: req.method,
+      contentType,
+      bodyLen: rawBody.length,
+      targetUrl
+    });
 
     const resp = await fetch(targetUrl, {
       method: "POST",
@@ -28,9 +36,11 @@ export default async function handler(req, res) {
     });
 
     const text = await resp.text();
+
+    console.log("Forwarded", { status: resp.status, elapsed_ms: Date.now() - started });
     res.status(resp.status).send(text);
   } catch (e) {
-    console.error("Proxy error:", e);
+    console.error("Proxy error:", e?.message || e);
     res.status(500).send("Proxy failed");
   }
 }
